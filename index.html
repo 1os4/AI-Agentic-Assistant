@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <title>PeopleMind AI - HR Document Q&A</title>
+    <link rel="stylesheet" href="styles.css?v=33" />
+    <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script type="module">
+      import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.min.mjs";
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.worker.min.mjs";
+      window.pdfjsLib = pdfjsLib;
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.6/dist/docx-preview.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <script defer src="app.js?v=33"></script>
+  </head>
+  <body>
+    <main class="app-frame">
+      <header class="app-header">
+        <nav class="view-tabs" aria-label="Application pages">
+          <button class="tab-button active" type="button" data-page-target="workspace">Workspace</button>
+          <button class="tab-button" type="button" data-page-target="dashboard">HR Dashboard</button>
+          <button class="tab-button" type="button" data-page-target="workflow">AI Workflow</button>
+          <button class="tab-button" type="button" data-page-target="knowledgeGraph">Knowledge Graph</button>
+        </nav>
+        <div class="header-actions">
+          <button id="apiStatusButton" class="api-status-button" type="button" aria-expanded="false">
+            <span id="apiStatusDot" class="status-dot"></span>
+            <span id="apiStatusText">API Key Required</span>
+          </button>
+          <div id="apiKeyPanel" class="api-key-popover" hidden>
+            <p class="api-popover-title">Gemini API key</p>
+            <div id="apiConnectionStatus" class="api-connection-status">
+              <span id="apiConnectionDot" class="status-dot"></span>
+              <strong>API key required</strong>
+            </div>
+            <div id="apiConnectedActions" class="api-popover-actions connected-actions" hidden>
+              <button id="replaceKeyButton" class="small-button" type="button"><i data-lucide="key-round"></i>Replace Key</button>
+              <button id="removeKeyButton" class="small-button danger-soft-button" type="button"><i data-lucide="trash-2"></i>Remove Key</button>
+            </div>
+            <div id="apiReplaceForm" class="api-replace-form">
+              <label id="apiInputLabel" class="field-label" for="geminiApiKeyInput">Gemini API key</label>
+              <input id="geminiApiKeyInput" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" placeholder="Paste Gemini API key" />
+              <div class="api-popover-actions">
+                <button id="saveKeyButton" class="small-button" type="button"><i data-lucide="key-round"></i>Save Key</button>
+                <button id="cancelReplaceKeyButton" class="small-button" type="button" hidden>Cancel</button>
+              </div>
+            </div>
+            <p id="apiKeyFeedback" class="api-feedback" aria-live="polite"></p>
+          </div>
+        </div>
+        <label class="mobile-nav-label" for="mobilePageSelect">
+          <span>Page</span>
+          <select id="mobilePageSelect">
+            <option value="workspace">Workspace</option>
+            <option value="dashboard">HR Dashboard</option>
+            <option value="workflow">AI Workflow</option>
+            <option value="knowledgeGraph">Knowledge Graph</option>
+          </select>
+        </label>
+      </header>
+      <section id="fileProtocolWarning" class="file-warning" hidden>
+        This application should be opened using a local web server. Use Live Server or deploy it to Vercel for complete functionality.
+      </section>
+
+      <section id="workspacePage" class="page active-page">
+        <section class="workspace-layout">
+          <aside class="references-panel">
+            <div class="panel-title">
+              <h2>References</h2>
+              <span id="activeCountBadge">0 documents ready</span>
+            </div>
+
+            <label class="upload-button" for="fileInput">
+              <input id="fileInput" type="file" multiple accept=".pdf,.docx,.txt,.md,.csv,.json,.html,.htm" />
+              <i data-lucide="upload"></i>
+              Upload HR docs
+            </label>
+
+            <div class="mini-actions">
+              <button id="clearSessionButton" class="plain-button danger" type="button"><i data-lucide="trash-2"></i>Clear</button>
+            </div>
+
+            <div id="documentList" class="reference-list" aria-live="polite"></div>
+          </aside>
+
+          <section class="preview-panel">
+            <div class="viewer-bar">
+              <div class="viewer-title">
+                <strong id="previewDocumentName">No document previewing</strong>
+                <span id="previewMeta">Upload a file to preview it</span>
+              </div>
+              <div class="viewer-controls" aria-label="Document viewer controls">
+                <button id="prevPageButton" class="small-button icon-only" type="button" title="Previous page" aria-label="Previous page"><i data-lucide="chevron-left"></i></button>
+                <label class="page-control" for="pageInput">
+                  <input id="pageInput" type="number" min="1" value="" aria-label="Current page" />
+                  <span id="pageIndicator">No document</span>
+                </label>
+                <button id="nextPageButton" class="small-button icon-only" type="button" title="Next page" aria-label="Next page"><i data-lucide="chevron-right"></i></button>
+                <button id="zoomOutButton" class="small-button icon-only" type="button" title="Zoom out" aria-label="Zoom out"><i data-lucide="minus"></i></button>
+                <span id="zoomIndicator">100%</span>
+                <button id="zoomInButton" class="small-button icon-only" type="button" title="Zoom in" aria-label="Zoom in"><i data-lucide="plus"></i></button>
+                <button id="fitWidthButton" class="small-button icon-only" type="button" title="Fit width" aria-label="Fit width"><i data-lucide="scan"></i></button>
+                <button id="resetZoomButton" class="small-button icon-only" type="button" title="Reset zoom" aria-label="Reset zoom"><i data-lucide="rotate-ccw"></i></button>
+                <button id="rotateButton" class="small-button icon-only" type="button" title="Rotate page" aria-label="Rotate page"><i data-lucide="rotate-cw"></i></button>
+                <input id="viewerSearchInput" class="viewer-search" type="search" placeholder="Search in document" aria-label="Search in document" />
+                <button id="askAboutFileButton" class="small-button" type="button"><i data-lucide="message-circle"></i>Ask About This File</button>
+                <button id="searchAllDocumentsButton" class="small-button" type="button"><i data-lucide="files"></i>Search All Documents</button>
+                <button id="downloadDocumentButton" class="small-button icon-only" type="button" title="Download original" aria-label="Download original document"><i data-lucide="download"></i></button>
+                <button id="fullscreenButton" class="small-button icon-only" type="button" title="Fullscreen" aria-label="Fullscreen viewer"><i data-lucide="maximize"></i></button>
+              </div>
+            </div>
+            <article id="documentPreview" class="document-preview">
+              <div class="empty-preview">
+                <i data-lucide="file-search"></i>
+                <h2>Upload HR documents</h2>
+                <p>Preview the uploaded content here, then ask questions in the chat. Answers are grounded only in these documents.</p>
+              </div>
+            </article>
+          </section>
+
+          <aside class="chat-column">
+            <section class="answer-panel">
+              <div class="answer-header">
+                <h2>Answer</h2>
+                <div class="answer-header-actions">
+                  <button id="clearChatButton" class="small-button danger-soft-button" type="button"><i data-lucide="trash-2"></i>Clear Chat</button>
+                  <button id="exportButton" class="small-button" type="button"><i data-lucide="download"></i>Export</button>
+                </div>
+              </div>
+              <div class="smart-actions" aria-label="Document AI actions">
+                <button id="summarizeCurrentButton" class="smart-action-button" type="button"><i data-lucide="file-text"></i>Summarize</button>
+                <button id="improveCurrentButton" class="smart-action-button" type="button"><i data-lucide="sparkles"></i>Improve</button>
+                <button id="risksCurrentButton" class="smart-action-button" type="button"><i data-lucide="shield-alert"></i>Find risks</button>
+                <button id="promptLibraryButton" class="smart-action-button" type="button"><i data-lucide="list-plus"></i>Questions</button>
+              </div>
+              <div id="promptLibraryPanel" class="prompt-library-panel" hidden>
+                <div class="prompt-library-header">
+                  <strong>Suggested questions</strong>
+                  <button id="closePromptLibraryButton" class="tiny-button" type="button" aria-label="Close questions"><i data-lucide="x"></i></button>
+                </div>
+                <div id="promptLibraryList" class="prompt-library-list"></div>
+              </div>
+              <div id="chatLog" class="chat-log" aria-live="polite"></div>
+              <form id="questionForm" class="question-form">
+                <div class="search-scope-control">
+                  <label for="searchScopeSelect">Search Scope</label>
+                  <select id="searchScopeSelect">
+                    <option value="all">All Ready Documents</option>
+                    <option value="current">Current Preview Document</option>
+                    <option value="selected">Choose Documents</option>
+                  </select>
+                </div>
+                <div id="selectedSearchDocumentsPanel" class="selected-documents-panel" hidden>
+                  <div id="selectedSearchDocumentsList" class="selected-documents-list"></div>
+                </div>
+                <div class="question-input-wrap">
+                  <div id="questionHighlightLayer" class="question-highlight-layer" aria-hidden="true"></div>
+                  <textarea id="questionInput" rows="4" placeholder="Query all uploaded HR documents..."></textarea>
+                </div>
+                <div id="fileNameSuggestions" class="file-name-suggestions" hidden></div>
+                <div class="question-actions">
+                  <span id="searchScopeHint" class="search-scope-hint">Search scope: All ready documents</span>
+                  <label class="check-row compact-check">
+                    <input id="strictCitations" type="checkbox" checked />
+                    <span>Citations</span>
+                  </label>
+                  <button id="askButton" class="send-button" type="submit"><i data-lucide="send"></i></button>
+                </div>
+              </form>
+            </section>
+          </aside>
+        </section>
+      </section>
+
+      <section id="dashboardPage" class="page dashboard-page">
+        <header class="simple-hero">
+          <div>
+            <p class="eyebrow">Confidential HR Workspace</p>
+            <h2>Ask questions answered only from uploaded HR documents.</h2>
+          </div>
+          <button id="dashboardExportButton" class="secondary-button" type="button"><i data-lucide="download"></i>Export Notes</button>
+        </header>
+
+        <section class="notice" role="note">
+          <i data-lucide="shield-alert"></i>
+          <p>This tool supports HR document analysis and administrative review. It does not provide legal advice or make final employment decisions. Important results must be reviewed by authorized HR and legal professionals.</p>
+        </section>
+
+        <section class="dashboard" aria-label="HR dashboard">
+          <article class="metric-card">
+            <span>Total uploaded documents</span>
+            <strong id="totalDocsMetric">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Ready for search</span>
+            <strong id="activeDocsMetric">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Policy questions asked</span>
+            <strong id="questionsMetric">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Workflow requests processed</span>
+            <strong id="workflowMetric">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Knowledge graphs generated</span>
+            <strong id="graphMetric">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Total graph nodes</span>
+            <strong id="graphNodesMetric">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Total graph relationships</span>
+            <strong id="graphEdgesMetric">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Presentation decks generated</span>
+            <strong id="deckMetric">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Total slides generated</span>
+            <strong id="slidesMetric">0</strong>
+          </article>
+        </section>
+
+        <section class="dashboard-details" aria-label="HR workspace summary">
+          <div class="detail-block">
+            <span>Answer scope</span>
+            <strong>Uploaded HR documents only</strong>
+          </div>
+          <div class="detail-block">
+            <span>Recently analyzed documents</span>
+            <p id="recentDocsList" class="helper-text">No documents analyzed yet.</p>
+          </div>
+          <div class="detail-block">
+            <span>Last graph generation</span>
+            <p id="lastGraphMetric" class="helper-text">No graph generated yet.</p>
+          </div>
+          <div class="detail-block">
+            <span>Last presentation generation</span>
+            <p id="lastDeckMetric" class="helper-text">No presentation generated yet.</p>
+          </div>
+        </section>
+
+        <section class="dashboard-tools">
+          <div class="shortcut-row" aria-label="Dashboard shortcuts">
+            <button class="secondary-button" type="button" data-page-target="workflow"><i data-lucide="workflow"></i>Open AI Workflow</button>
+            <button id="dashboardGraphButton" class="secondary-button" type="button"><i data-lucide="network"></i>Generate Knowledge Graph</button>
+            <button id="dashboardDeckButton" class="secondary-button" type="button"><i data-lucide="presentation"></i>Create Presentation</button>
+          </div>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Privacy</h2>
+            </div>
+            <p class="helper-text">Documents are processed in the browser when technically possible. Uploaded document text and chat excerpts are not saved to an external database in this MVP. The Gemini key is stored only in sessionStorage.</p>
+          </div>
+        </section>
+      </section>
+
+      <section id="workflowPage" class="page dashboard-page">
+        <header class="simple-hero">
+          <div>
+            <p class="eyebrow">AI Workflow</p>
+            <h2>See how PeopleMind AI processes and validates every HR request.</h2>
+          </div>
+          <div class="hero-actions">
+            <button id="clearWorkflowHistoryButton" class="secondary-button" type="button"><i data-lucide="trash-2"></i>Clear Workflow History</button>
+            <button id="exportWorkflowLogButton" class="secondary-button" type="button"><i data-lucide="download"></i>Export Workflow JSON</button>
+          </div>
+        </header>
+
+        <section class="workflow-dashboard">
+          <article class="workflow-request-card">
+            <div class="panel-heading">
+              <h2>Current Request</h2>
+              <span id="workflowStatusPill" class="status-pill waiting">Waiting</span>
+            </div>
+            <dl class="request-grid">
+              <div><dt>Request ID</dt><dd id="workflowRequestId">No request yet</dd></div>
+              <div><dt>Current Question</dt><dd id="workflowQuestion">No workflow requests have been processed yet.</dd></div>
+              <div><dt>Detected Intent</dt><dd id="workflowIntent">Waiting</dd></div>
+              <div><dt>Search Scope</dt><dd id="workflowSearchScope">All ready documents</dd></div>
+              <div><dt>Target Document</dt><dd id="workflowTargetDocument">None detected</dd></div>
+              <div><dt>Documents Searched</dt><dd id="workflowDocsSearched">0</dd></div>
+              <div><dt>Sections Checked</dt><dd id="workflowSectionsChecked">0</dd></div>
+              <div><dt>Evidence Selected</dt><dd id="workflowEvidenceSelected">0 passages</dd></div>
+              <div><dt>Gemini Model</dt><dd id="workflowModel">Not used yet</dd></div>
+              <div><dt>Citation Validation</dt><dd id="workflowCitationValidation">Not run yet</dd></div>
+              <div><dt>Total Processing Time</dt><dd id="workflowDuration">0 ms</dd></div>
+            </dl>
+          </article>
+
+          <article class="workflow-stage-card">
+            <div class="panel-heading">
+              <h2>Processing Stages</h2>
+              <strong id="workflowSummary">Ready</strong>
+            </div>
+            <ol id="workflowList" class="workflow-list large"></ol>
+          </article>
+        </section>
+
+        <section class="panel workflow-history-panel">
+          <div class="panel-heading">
+            <h2>Recent Requests</h2>
+            <span id="workflowHistoryCount" class="helper-text">0 requests</span>
+          </div>
+          <div id="workflowHistoryList" class="workflow-history-list">
+            <div class="empty-card">No workflow requests have been processed yet.</div>
+          </div>
+          <div id="workflowDetailPanel" class="workflow-detail-panel" hidden></div>
+        </section>
+      </section>
+
+      <section id="knowledgeGraphPage" class="page dashboard-page">
+        <header class="simple-hero">
+          <div>
+            <p class="eyebrow">HR Knowledge Graph</p>
+            <h2>Explore relationships between HR policies, employees, managers, responsibilities, procedures and requirements.</h2>
+          </div>
+        </header>
+
+        <section class="graph-help-card">
+          <div>
+            <h3>What is an HR Knowledge Graph?</h3>
+            <p>A Knowledge Graph visually connects information found across your uploaded HR documents. Boxes represent items such as employees, managers, policies, benefits, procedures, and training requirements. Lines show relationships such as 'approves,' 'requires,' 'reports to,' or 'applies to.' Click any item to inspect its supporting document evidence.</p>
+          </div>
+          <button id="graphExampleButton" class="small-button" type="button"><i data-lucide="sparkles"></i>Show Example</button>
+          <div id="graphExamplePanel" class="graph-example-panel" hidden>
+            <strong>Example only - not generated from uploaded documents.</strong>
+            <div><span>Employee</span><b>Must Complete</b><span>Induction Training</span></div>
+            <div><span>Manager</span><b>Approves</b><span>Annual Leave Request</span></div>
+          </div>
+        </section>
+
+        <section class="graph-workspace">
+          <aside class="graph-controls panel">
+            <div class="panel-heading">
+              <h2>Graph Setup</h2>
+            </div>
+            <section class="graph-setup-section">
+              <h3>Graph Source</h3>
+              <label class="input-label with-help" for="graphScopeSelect">
+                Build Graph From
+                <button class="help-icon" type="button" title="Choose which uploaded HR documents should be analyzed to build the graph." aria-label="Help for Build Graph From">?</button>
+              </label>
+              <select id="graphScopeSelect">
+                <option>All Ready Documents</option>
+                <option>Current Preview Document</option>
+                <option>Choose Specific Documents</option>
+                <option>Document Category</option>
+                <option>Latest Edited Versions</option>
+              </select>
+              <p id="graphScopeHelp" class="control-help">Analyze every successfully processed HR document.</p>
+
+              <div id="graphCategoryBlock" hidden>
+                <label class="input-label" for="graphCategorySelect">Document Category</label>
+                <select id="graphCategorySelect"></select>
+                <p class="control-help">Only categories with ready documents can be selected.</p>
+              </div>
+            </section>
+
+            <section id="graphDocumentSelectionBlock" class="graph-setup-section">
+              <h3>Document Selection</h3>
+              <div class="document-selector" id="graphDocumentSelector">
+                <button id="graphDocumentSelectorButton" class="document-selector-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <span id="graphSelectedCount">0 documents selected</span>
+                  <i data-lucide="chevron-down"></i>
+                </button>
+                <div id="graphDocumentDropdown" class="document-selector-menu" hidden>
+                  <div class="selector-menu-header">
+                    <input id="graphDocumentSearchInput" type="search" placeholder="Search documents..." aria-label="Search documents for graph" />
+                    <button id="closeGraphDocumentSelector" class="tiny-button" type="button" aria-label="Close document selector"><i data-lucide="x"></i></button>
+                  </div>
+                  <div class="selector-actions">
+                    <button id="selectAllGraphDocuments" class="small-button" type="button">Select All</button>
+                    <button id="clearGraphDocuments" class="small-button" type="button">Clear</button>
+                  </div>
+                  <div id="graphDocumentOptions" class="document-options" role="listbox" aria-multiselectable="true"></div>
+                </div>
+              </div>
+              <div id="graphSelectedChips" class="selected-document-chips" aria-live="polite"></div>
+              <p id="graphSelectionMessage" class="control-help">Choose at least one ready document.</p>
+              <span id="graphSelectionAnnouncement" class="sr-only" aria-live="polite"></span>
+            </section>
+
+            <details id="graphFiltersDisclosure" class="graph-setup-section graph-filters-disclosure" open>
+              <summary>Graph Filters</summary>
+              <div class="filter-grid">
+                <label id="graphSearchFilterGroup">
+                  <span class="input-label">Search Nodes</span>
+                  <input id="graphSearchInput" type="search" placeholder="Search graph nodes" />
+                </label>
+                <label id="graphNodeTypeFilterGroup">
+                  <span class="input-label with-help">
+                    Node Type
+                    <button class="help-icon" type="button" title="Groups graph items into practical HR categories such as people, policies, benefits, and compliance." aria-label="Help for Node Type">?</button>
+                  </span>
+                  <select id="graphNodeTypeFilter"><option>All Node Types</option></select>
+                </label>
+                <label id="graphDocumentFilterGroup">
+                  <span class="input-label">Source Document</span>
+                  <select id="graphDocumentFilter"><option>All Documents</option></select>
+                </label>
+                <label id="graphRelationshipFilterGroup">
+                  <span class="input-label with-help">
+                    Relationship Type
+                    <button class="help-icon" type="button" title="Filters lines by how two HR concepts are connected, such as Requires, Approves, or Reports To." aria-label="Help for Relationship Type">?</button>
+                  </span>
+                  <select id="graphRelationshipFilter"><option>All Relationships</option></select>
+                </label>
+                <label id="graphConfidenceFilterGroup">
+                  <span class="input-label with-help">
+                    Minimum Confidence
+                    <button class="help-icon" type="button" title="Controls how certain the AI must be before displaying a node or relationship. Higher values create a smaller, more reliable graph." aria-label="Help for Minimum Confidence">?</button>
+                  </span>
+                  <input id="graphConfidenceInput" type="range" min="0" max="100" value="60" />
+                  <span id="graphConfidenceValue" class="control-help">60%</span>
+                </label>
+              </div>
+            </details>
+
+            <section class="graph-setup-section">
+              <h3>Graph Options</h3>
+              <label class="check-row with-help">
+                <input id="hideIsolatedNodes" type="checkbox" />
+                <span>Hide isolated nodes</span>
+                <button class="help-icon" type="button" title="Hides graph items that have no visible relationship lines after filtering." aria-label="Help for Hide Isolated Nodes">?</button>
+              </label>
+              <label class="check-row"><input id="toggleGraphLabels" type="checkbox" checked /> <span>Show labels</span></label>
+              <div class="tool-grid graph-tool-grid">
+                <button id="graphZoomInButton" class="small-button" type="button"><i data-lucide="plus"></i>Zoom In</button>
+                <button id="graphZoomOutButton" class="small-button" type="button"><i data-lucide="minus"></i>Zoom Out</button>
+                <button id="graphFitButton" class="small-button" type="button"><i data-lucide="scan"></i>Fit Graph</button>
+                <button id="graphResetButton" class="small-button" type="button"><i data-lucide="rotate-ccw"></i>Reset</button>
+                <button id="graphFullscreenButton" class="small-button" type="button"><i data-lucide="maximize"></i>Fullscreen</button>
+              <button id="graphExportButton" class="small-button" type="button"><i data-lucide="download"></i>Export JSON</button>
+              <button id="graphExportPngButton" class="small-button" type="button"><i data-lucide="image"></i>PNG</button>
+              <button id="graphExportSvgButton" class="small-button" type="button"><i data-lucide="file-code"></i>SVG</button>
+              <button id="graphExportNodesCsvButton" class="small-button" type="button"><i data-lucide="table"></i>Nodes CSV</button>
+              <button id="graphExportEdgesCsvButton" class="small-button" type="button"><i data-lucide="table-2"></i>Relationships CSV</button>
+              </div>
+            </section>
+
+            <div class="graph-setup-section generate-section">
+              <h3>Generate Actions</h3>
+              <p id="graphReadySummary" class="control-help">Ready to analyze 0 documents.</p>
+              <button id="generateGraphButton" class="secondary-button full-button" type="button"><i data-lucide="network"></i>Generate Knowledge Graph</button>
+              <div class="secondary-action-row">
+                <button id="regenerateGraphButton" class="small-button" type="button"><i data-lucide="refresh-cw"></i>Regenerate</button>
+                <button id="clearGraphButton" class="small-button danger-soft-button" type="button"><i data-lucide="trash-2"></i>Clear Graph</button>
+              </div>
+            </div>
+            <p id="graphStatus" class="helper-text">Upload and process HR documents before generating a graph.</p>
+          </aside>
+
+          <section class="graph-main">
+            <div id="knowledgeGraphCanvas" class="graph-canvas">
+              <div class="empty-card">Upload and process HR documents before generating a graph.</div>
+            </div>
+          </section>
+
+          <aside class="graph-details panel">
+            <div class="panel-heading">
+              <h2>Details</h2>
+            </div>
+            <div id="graphDetailsPanel" class="graph-details-body">
+              <p class="helper-text">Select a node or relationship to inspect its evidence.</p>
+            </div>
+          </aside>
+        </section>
+      </section>
+
+      <section id="presentationDeckPage" class="page dashboard-page">
+        <header class="simple-hero">
+          <div>
+            <p class="eyebrow">AI HR Presentation Builder</p>
+            <h2>Turn uploaded HR documents into a professional evidence-based presentation.</h2>
+          </div>
+        </header>
+
+        <section class="deck-workspace">
+          <aside class="deck-setup panel">
+            <div class="panel-heading">
+              <h2>Presentation Setup</h2>
+            </div>
+            <label class="input-label" for="presentationTitleInput">Presentation Title</label>
+            <input id="presentationTitleInput" type="text" value="PeopleMind AI HR Analysis" />
+
+            <label class="input-label" for="presentationTypeSelect">Presentation Type</label>
+            <select id="presentationTypeSelect">
+              <option>Executive Policy Brief</option>
+              <option>HR Policy Training</option>
+              <option>Employee Onboarding</option>
+              <option>Recruitment Review</option>
+              <option>Compliance Review</option>
+              <option>Policy Comparison</option>
+              <option>Management Summary</option>
+              <option>Employee Awareness</option>
+              <option>Custom Presentation</option>
+            </select>
+
+            <label class="input-label" for="presentationAudienceSelect">Audience</label>
+            <select id="presentationAudienceSelect">
+              <option>HR Leadership</option>
+              <option>Employees</option>
+              <option>Managers</option>
+              <option>Recruitment Team</option>
+              <option>Compliance Team</option>
+              <option>New Employees</option>
+              <option>Executive Management</option>
+              <option>Custom Audience</option>
+            </select>
+
+            <label class="input-label" for="presentationScopeSelect">Document Scope</label>
+            <select id="presentationScopeSelect">
+              <option>All Ready Documents</option>
+              <option>Current Document</option>
+              <option>Selected Documents</option>
+              <option>Document Category</option>
+              <option>Current AI Answer</option>
+              <option>Current HR Report</option>
+              <option>Current Knowledge Graph</option>
+            </select>
+
+            <label class="input-label" for="presentationSlideCountSelect">Number of Slides</label>
+            <select id="presentationSlideCountSelect">
+              <option>5</option>
+              <option selected>7</option>
+              <option>10</option>
+              <option>12</option>
+              <option>Custom</option>
+            </select>
+            <input id="customSlideCountInput" type="number" min="3" max="20" value="7" hidden />
+
+            <label class="input-label" for="presentationToneSelect">Tone</label>
+            <select id="presentationToneSelect">
+              <option>Executive</option>
+              <option selected>Professional</option>
+              <option>Educational</option>
+              <option>Concise</option>
+              <option>Detailed</option>
+              <option>Employee Friendly</option>
+            </select>
+
+            <div class="option-grid">
+              <label class="check-row"><input id="deckCitationsOption" type="checkbox" checked /> <span>Citations</span></label>
+              <label class="check-row"><input id="deckNotesOption" type="checkbox" checked /> <span>Speaker Notes</span></label>
+              <label class="check-row"><input id="deckRecommendationsOption" type="checkbox" checked /> <span>Recommendations</span></label>
+              <label class="check-row"><input id="deckActionPlanOption" type="checkbox" checked /> <span>Action Plan</span></label>
+              <label class="check-row"><input id="deckGraphSlideOption" type="checkbox" /> <span>Knowledge Graph Slide</span></label>
+              <label class="check-row"><input id="deckQuestionsOption" type="checkbox" checked /> <span>Questions Slide</span></label>
+            </div>
+
+            <label class="input-label" for="deckThemeSelect">Theme</label>
+            <select id="deckThemeSelect">
+              <option>PeopleMind Red</option>
+              <option>Executive Navy</option>
+              <option>Professional Teal</option>
+              <option>Minimal Light</option>
+              <option>Dark Corporate</option>
+            </select>
+
+            <label class="input-label" for="deckAccentInput">Accent Color</label>
+            <input id="deckAccentInput" type="color" value="#c51621" />
+
+            <label class="input-label" for="deckCompanyInput">Company Name</label>
+            <input id="deckCompanyInput" type="text" value="PeopleMind AI" />
+
+            <label class="input-label" for="deckLogoInput">Logo Text</label>
+            <input id="deckLogoInput" type="text" value="PM" />
+
+            <label class="input-label" for="deckFooterInput">Footer Text</label>
+            <input id="deckFooterInput" type="text" value="Evidence-based HR document intelligence" />
+
+            <button id="generateDeckButton" class="secondary-button full-button" type="button"><i data-lucide="sparkles"></i>Generate Presentation</button>
+            <p id="deckStatus" class="helper-text">Upload HR documents and configure your presentation.</p>
+          </aside>
+
+          <section class="deck-preview-panel">
+            <div class="deck-toolbar">
+              <button id="prevSlideButton" class="small-button" type="button"><i data-lucide="chevron-left"></i>Previous Slide</button>
+              <span id="slideCounter">No slides</span>
+              <button id="nextSlideButton" class="small-button" type="button">Next Slide<i data-lucide="chevron-right"></i></button>
+              <button id="deckFullscreenButton" class="small-button" type="button"><i data-lucide="maximize"></i>Fullscreen</button>
+              <button id="deckZoomOutButton" class="small-button" type="button"><i data-lucide="minus"></i></button>
+              <button id="deckZoomInButton" class="small-button" type="button"><i data-lucide="plus"></i></button>
+            </div>
+            <div id="slidePreview" class="slide-preview">
+              <div class="empty-card">Upload HR documents and configure your presentation.</div>
+            </div>
+            <div class="deck-export-row">
+              <button id="exportDeckHtmlButton" class="small-button" type="button"><i data-lucide="file-code"></i>Export HTML</button>
+              <button id="downloadPptxButton" class="small-button" type="button"><i data-lucide="presentation"></i>Download PowerPoint</button>
+              <button id="printDeckButton" class="small-button" type="button"><i data-lucide="printer"></i>Print / Save as PDF</button>
+              <button id="exportDeckJsonButton" class="small-button" type="button"><i data-lucide="download"></i>Export Deck JSON</button>
+            </div>
+          </section>
+
+          <aside class="deck-editor panel">
+            <div class="panel-heading">
+              <h2>Slide Editor</h2>
+            </div>
+            <label class="input-label" for="slideTitleInput">Slide Title</label>
+            <input id="slideTitleInput" type="text" />
+
+            <label class="input-label" for="slideSubtitleInput">Subtitle</label>
+            <input id="slideSubtitleInput" type="text" />
+
+            <label class="input-label" for="slideBulletsInput">Bullet Points</label>
+            <textarea id="slideBulletsInput" rows="7" placeholder="One bullet per line"></textarea>
+
+            <label class="input-label" for="slideNotesInput">Speaker Notes</label>
+            <textarea id="slideNotesInput" rows="5"></textarea>
+
+            <div class="tool-grid">
+              <button id="saveSlideEditsButton" class="small-button" type="button"><i data-lucide="save"></i>Edit Slide</button>
+              <button id="addSlideButton" class="small-button" type="button"><i data-lucide="plus"></i>Add Slide</button>
+              <button id="duplicateSlideButton" class="small-button" type="button"><i data-lucide="copy"></i>Duplicate</button>
+              <button id="deleteSlideButton" class="small-button" type="button"><i data-lucide="trash-2"></i>Delete</button>
+              <button id="moveSlideUpButton" class="small-button" type="button"><i data-lucide="arrow-up"></i>Move Up</button>
+              <button id="moveSlideDownButton" class="small-button" type="button"><i data-lucide="arrow-down"></i>Move Down</button>
+              <button id="regenerateSlideButton" class="small-button" type="button"><i data-lucide="refresh-cw"></i>Regenerate Slide</button>
+              <button id="shortenSlideButton" class="small-button" type="button"><i data-lucide="minimize-2"></i>Shorten</button>
+              <button id="expandNotesButton" class="small-button" type="button"><i data-lucide="file-text"></i>Expand Notes</button>
+              <button id="addRecommendationsSlideButton" class="small-button" type="button"><i data-lucide="lightbulb"></i>Add Recommendations</button>
+              <button id="addActionItemsSlideButton" class="small-button" type="button"><i data-lucide="list-checks"></i>Add Action Items</button>
+              <button id="addGraphSlideButton" class="small-button" type="button"><i data-lucide="network"></i>Add Graph Slide</button>
+            </div>
+          </aside>
+        </section>
+      </section>
+    </main>
+    <aside id="referenceDrawer" class="reference-drawer" aria-hidden="true" aria-live="polite"></aside>
+    <aside id="retrievalDebugPanel" class="retrieval-debug" hidden aria-live="polite"></aside>
+  </body>
+</html>
