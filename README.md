@@ -1,6 +1,6 @@
-# Build with  Agentic Multi-Document Research
+# Build with Agentic Multi-Document Research
 
-PeopleMind AI is an enterprise HR document intelligence assistant for asking questions across uploaded HR documents. It supports multi-document search, citations, document preview, Gemini-powered answers, AI workflow visibility, an HR dashboard, and a knowledge graph.
+Agentic Multi-Document Research is an enterprise HR document intelligence assistant for asking questions across uploaded HR documents. It supports multi-document search, citations, document preview, Gemini-powered answers, AI workflow visibility, an HR dashboard, and a knowledge graph.
 
 ## Live Demo
 
